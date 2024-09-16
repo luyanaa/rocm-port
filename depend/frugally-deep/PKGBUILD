@@ -4,7 +4,7 @@ pkgname=('frugally-deep')
 pkgver=next
 pkgrel=999000
 pkgdesc=""
-arch=('loong64' 'x86_64')
+arch=('loong64' 'x86_64' 'riscv64')
 license=('MIT')
 url="https://github.com/ROCm/ROCT-Thunk-Interface.git"
 
@@ -12,8 +12,7 @@ source=(
     "git+https://github.com/Dobiasd/frugally-deep.git"
 )
 b2sums=('SKIP')
-depends=(
-)
+depends=('eigen' 'nlohmann-json')
 PATH=/opt/rocm-${pkgver}/bin:$PATH
 prepare() {
 #  sed -i '32d' hipfort/test/CMakeLists.txt

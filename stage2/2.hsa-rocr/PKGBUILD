@@ -1,0 +1,43 @@
+pkgbase='hsa-rocr'
+pkgname=('hsa-rocr')
+pkgver=next
+pkgrel=999000
+pkgdesc="HSA Runtime API and runtime for ROCm"
+arch=('loong64' 'x86_64' 'riscv64')
+license=('NCSA')
+depends=('rocm-core' 'glibc' 'gcc-libs' 'libelf' 'libdrm'
+         'hsakmt-roct' 'rocm-device-libs')
+makedepends=('cmake' 'rocm-llvm' 'xxd')
+
+url="https://github.com/ROCm/rocm-core"
+
+source=(
+    "git+https://github.com/ROCm/ROCR-Runtime.git#branch=rocm-6.0.x"
+    "rocr-port.patch"
+)
+b2sums=('SKIP' 'SKIP')
+
+PATH=/opt/rocm-${pkgver}/bin:$PATH
+prepare() {
+  cd ROCR-Runtime
+  git apply ../rocr-port.patch
+  cd ..
+}
+build() {
+  mkdir build || true
+  cd build
+  cmake "../ROCR-Runtime/src" \
+  -DCMAKE_BUILD_TYPE=None \
+  -DCMAKE_C_COMPILER=/opt/rocm-${pkgver}/bin/clang \
+  -DCMAKE_CXX_COMPILER=/opt/rocm-${pkgver}/bin/clang++ \
+  -DCMAKE_INSTALL_PREFIX=/opt/rocm-${pkgver} \
+  -DBUILD_SHARED_LIBS=ON \
+  -DCMAKE_CXX_FLAGS="$CXXFLAGS -DNDEBUG" \
+  -G 'Unix Makefiles'
+  cmake --build .
+}
+
+package() {
+  cd build
+  cmake --install . --prefix "$pkgdir"/opt/rocm-${pkgver}
+}

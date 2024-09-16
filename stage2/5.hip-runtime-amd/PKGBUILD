@@ -1,0 +1,93 @@
+# Maintainer: Torsten Keßler <tpkessler at archlinux dot org>
+# Contributor: acxz <akashpatel2008 at yahoo dot com>
+pkgname=hip-runtime-amd
+pkgver=next
+pkgrel=999900
+pkgdesc="Heterogeneous Interface for Portability ROCm"
+arch=('x86_64' 'riscv64' 'loong64')
+url='https://rocm.docs.amd.com/projects/HIP/en/latest/'
+license=('MIT')
+depends=("rocm-core" 'bash' 'perl' 'glibc' 'gcc-libs' 'numactl'
+         'mesa' 'comgr' "rocm-llvm" 'libelf')
+makedepends=('cmake' 'python' 'python-cppheaderparser')
+optdepends=('inetutils: Print hostname in hipconfig')
+provides=('hip')
+conflicts=('hip')
+
+source=(
+    "git+https://github.com/ROCm/HIP.git#branch=rocm-6.0.x"
+    "git+https://github.com/ROCm/clr.git#branch=rocm-6.0.x"
+    "git+https://github.com/ROCm/HIPCC.git#branch=rocm-6.0.x"
+    "clr-riscv64.patch"
+    "clr-loongarch64.patch"
+    "hiprtc-lp64d.patch"
+    "hip_embed_pch-lp64d.patch"
+)
+
+b2sums=('SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP')
+
+prepare() {
+  cd clr
+  ARCHITECTURE="$(uname -m)"
+  if [ ${ARCHITECTURE} != "x86_64" ]; then
+    git apply "../clr-${ARCHITECTURE}.patch"
+  fi
+  if [ ${ARCHITECTURE} == "riscv64" ]; then
+    git apply "../hiprtc-lp64d.patch"
+    git apply "../hip_embed_pch-lp64d.patch"
+  fi
+  cd ..
+}
+
+build() {
+  # Enabled assertions can cause crashes if applications are run with increased
+  # verbosity, see for instance this issue with blender,
+  # https://gitlab.archlinux.org/archlinux/packaging/packages/blender/-/issues/13
+  # The relevant upstream issue is
+  # https://github.com/ROCm/HIP/issues/2426
+  CXXFLAGS=${CXXFLAGS/-Wp,-D_GLIBCXX_ASSERTIONS/}
+  # Disable assertions in C/C++ code to fix
+  # https://gitlab.archlinux.org/archlinux/packaging/packages/python-pytorch/-/issues/13
+  CXXFLAGS+=" -DNDEBUG"
+  CFLAGS+=" -DNDEBUG"
+  local hipcc_args=(
+    -Wno-dev
+    -S "$srcdir/HIPCC"
+    -B build-hipcc
+    -DCMAKE_BUILD_TYPE=None
+  )
+  cmake "${hipcc_args[@]}"
+  cmake --build build-hipcc
+
+  local hip_args=(
+    -Wno-dev
+    -S "$srcdir/clr"
+    -B build
+    -DCMAKE_BUILD_TYPE=None
+    -DCMAKE_INSTALL_PREFIX=/opt/rocm-${pkgver}/
+    -DHIP_COMMON_DIR="$srcdir/HIP"
+    -DHIPCC_BIN_DIR="$srcdir/build-hipcc"
+    -DHIP_CATCH_TEST=0
+    -DCLR_BUILD_HIP=ON
+    -DCLR_BUILD_OCL=OFF
+  )
+  cmake "${hip_args[@]}"
+  cmake --build build
+}
+
+package() {
+  DESTDIR="$pkgdir" cmake --install build
+  # Binary hipcc and hipconfig currently don't work, so we don't install them:
+  # https://github.com/ROCm-Developer-Tools/HIPCC/issues/103
+  #
+  # There's no install target for hipcc and hipconfig, so copy them manually
+  # install "$srcdir/build-hipcc/hipcc.bin" "$pkgdir/opt/rocm/bin/hipcc.bin"
+  # install "$srcdir/build-hipcc/hipconfig.bin" "$pkgdir/opt/rocm/bin/hipconfig.bin"
+
+  # Remove Windows scripts
+  rm "$pkgdir/opt/rocm-${pkgver}/bin/hipcc.bat"
+  rm "$pkgdir/opt/rocm-${pkgver}/bin/hipconfig.bat"
+
+  echo '/opt/rocm-${pkgver}/hip/lib' > "$pkgname.conf"
+  install -Dm644 "$pkgname.conf" "$pkgdir/etc/ld.so.conf.d/$pkgname.conf"
+}

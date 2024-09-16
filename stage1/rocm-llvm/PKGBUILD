@@ -1,68 +1,155 @@
 pkgbase='rocm-llvm'
-pkgname=('rocm-llvm')
+pkgname=('rocm-llvm' 'rocm-device-libs' 'comgr' 'hipcc')
 pkgver=next
 pkgrel=999000
 pkgdesc="rocm-core is a utility which can be used to get ROCm release version."
-arch=('loong64' 'x86_64')
+arch=('loong64' 'x86_64' 'riscv64' 'aarch64' )
+depends=('rocm-core' 'perl' 'gcc-libs' 'zlib' 'zstd' 'libffi' 'libedit'
+         'ncurses' 'libxml2')
+makedepends=('cmake' 'python' 'ninja')
+
 license=('Apache')
 url="https://github.com/ROCm/llvm-project"
-provides=('rocm-compilersupport' 'rocm-device-libs')
+
 source=(
     "git+https://github.com/ROCm/llvm-project.git#branch=amd-stg-open"
-    "loongarch.patch"
+    "rocm-port.patch"
 )
 b2sums=('SKIP' 'SKIP')
-#prepare() {
-#echo
-#}
+
 TARGET="AMDGPU;NVPTX;"
-TARGET="$TARGET;LoongArch;"
-TARGET="$TARGET;X86;"
+
+ARCHITECTURE="$(uname -m)"
+if [ ${ARCHITECTURE} = "riscv64" ]; then
+    TARGET="$TARGET;RISCV;"
+elif [ ${ARCHITECTURE} = "loongarch64" ]; then
+    MODEL="-mcmodel=medium"
+    TARGET="$TARGET;LoongArch;"
+elif [ ${ARCHITECTURE} = "x86_64" ]; then
+    TARGET="$TARGET;X86;"
+elif [ ${ARCHITECTURE} = "aarch64" ]; then
+    TARGET="$TARGET;AArch64"
+fi
+
+let LINK_JOBS=$(nproc)
+let LINK_JOBS=LINK_JOBS/2
+
 prepare() {
   cd llvm-project
-    git apply ../loongarch.patch
+    git apply ../rocm-port.patch
   cd ..
+}
+build(){
   mkdir build || true
   cd build
-  cmake \
-  -DCMAKE_C_COMPILER=/opt/rocm-${pkgver}/bin/clang \
-  -DCMAKE_CXX_COMPILER=/opt/rocm-${pkgver}/bin/clang++ \
-  -DCMAKE_BUILD_TYPE=RelWithDebInfo \
-  -DCMAKE_C_FLAGS="-fno-lto -pipe -mcmodel=medium" \
-  -DCMAKE_CXX_FLAGS="-fno-lto -pipe -mcmodel=medium" \
+  cmake -DCMAKE_BUILD_TYPE=Release \
+  -DCMAKE_C_FLAGS="-fno-lto -pipe -g1 ${MODEL}" \
+  -DCMAKE_CXX_FLAGS="-fno-lto -pipe -g1 ${MODEL}" \
+  -DLLVM_DEFAULT_TARGET_TRIPLE="${ARCHITECTURE}-unknown-linux-gnu" \
   -DCMAKE_INSTALL_PREFIX="/opt/rocm-${pkgver}" \
   -DLLVM_ENABLE_ASSERTIONS=1 \
   -DLLVM_TARGETS_TO_BUILD="$TARGET" \
   -DLLVM_ENABLE_PROJECTS="lld;clang;compiler-rt;flang" \
-  -DLLVM_EXTERNAL_PROJECTS="device-libs;hipcc;comgr" \
-  -DLLVM_EXTERNAL_HIPCC_SOURCE_DIR=$PWD/../llvm-project/amd/hipcc/ \
-  -DLLVM_EXTERNAL_COMGR_SOURCE_DIR=$PWD/../llvm-project/amd/comgr/ \
-  -DLLVM_EXTERNAL_DEVICE_LIBS_SOURCE_DIR=$PWD/../llvm-project/amd/device-libs/ \
-  -DHIP_PLATFORM='amd' \
+  -DOCAMLFIND=NO \
+  -DLLVM_ENABLE_OCAMLDOC=OFF \
+  -DLLVM_INCLUDE_BENCHMARKS=OFF \
+  -DLLVM_BUILD_TESTS=OFF \
+  -DLLVM_INCLUDE_TESTS=OFF \
+  -DCLANG_INCLUDE_TESTS=OFF \
+  -DLLVM_LINK_LLVM_DYLIB=OFF \
+  -DLLVM_BUILD_LLVM_DYLIB=OFF \
+  -DLLVM_INSTALL_UTILS=ON \
+  -DCLANG_DEFAULT_LINKER=lld \
+  -DLLVM_ENABLE_RUNTIMES="libcxx;libcxxabi;libunwind" \
+  -DLIBCXX_ENABLE_STATIC=ON \
+  -DLIBCXXABI_ENABLE_STATIC=ON \
   -DPROJECT_VERSION_MAJOR=6 \
   -DPROJECT_VERSION_MINOR=0 \
   -DPROJECT_VERSION_PATCH=2 \
   -DBUILD_SHARED_LIBS=ON \
+  -DLLVM_PARALLEL_LINK_JOBS=${LINK_JOBS} \
   -G "Ninja" \
-  -S ../llvm-project/llvm/
+  ../llvm-project/llvm/
+
   sed -i 's!-lamdhip64!/opt/rocm-next/lib64/libamdhip64.so!g' ../llvm-project/clang/lib/Driver/ToolChains/Linux.cpp
-}
-build() {
-  cd build
+  cmake --build . 
+  
+  # Build rocm-device-libs
+  cd ..
+  mkdir build-device-libs || true
+  cd build-device-libs
+  cmake \
+  -DCMAKE_BUILD_TYPE=None \
+  -DCMAKE_INSTALL_PREFIX="/opt/rocm-${pkgver}" \
+  -DCMAKE_PREFIX_PATH="$srcdir/build" \
+  -G "Ninja" \
+  ../llvm-project/amd/device-libs
+  cmake --build .
+
+  # Build comgr
+  cd ..
+  mkdir build-comgr || true
+  cd build-comgr
+  cmake \
+  -DCMAKE_BUILD_TYPE=None \
+  -DCMAKE_INSTALL_PREFIX=/opt/rocm-${pkgver} \
+  -DBUILD_TESTING=OFF \
+  -DCMAKE_PREFIX_PATH="$srcdir/build;$srcdir/build-device-libs" "../llvm-project/amd/comgr"  
+  cmake --build .
+
+  # Build hipcc
+  cd ..
+  mkdir build-hipcc || true
+  cd build-hipcc
+  cmake \
+  -DCMAKE_BUILD_TYPE=None \
+  -DCMAKE_INSTALL_PREFIX=/opt/rocm-${pkgver} "../llvm-project/amd/hipcc"
   cmake --build .
 }
 
-check() {
-#  cd build
-#  ninja check
-echo
+package_rocm-llvm() {
+    pkgdesc='Radeon Open Compute - LLVM toolchain (llvm, clang, lld)'
+    license=('Apache-2.0 WITH LLVM-exception')
+    depends=('rocm-core' 'perl' 'gcc-libs' 'zlib' 'zstd' 'libffi' 'libedit'
+             'ncurses' 'libxml2')
+    
+    DESTDIR="$pkgdir" cmake --install build
+
+    # Provide symlink to old LLVM location, pre ROCm 6.0.0
+    ln -s /opt/rocm-${pkgver}/lib/llvm "$pkgdir/opt/rocm-${pkgver}/llvm"
+
+    # https://bugs.archlinux.org/task/28479
+    install -d "$pkgdir/opt/rocm-${pkgver}/lib/llvm/lib/bfd-plugins"
+    ln -s /opt/rocm-${pkgver}/lib/llvm/lib/LLVMgold.so "$pkgdir/opt/rocm-${pkgver}/lib/llvm/lib/bfd-plugins/LLVMgold.so"
+
 }
 
-#packaging() {
+package_rocm-device-libs() {
+    pkgdesc='AMD specific device-side language runtime libraries'
+    license=('NCSA')
+    depends=('rocm-core')
 
-#}
-package() {
-  cd build
-  cmake --install . --prefix "$pkgdir"/opt/rocm-${pkgver}
+    DESTDIR="$pkgdir" cmake --install build-device-libs
+}
+
+package_comgr() {
+    pkgdesc='AMDGPU GPU Code Object Manager'
+    license=('NCSA')
+    depends=('glibc' 'gcc-libs' 'zstd' 'zlib' 'ncurses'
+             'rocm-core' 'rocm-llvm' 'rocm-device-libs')
+
+    DESTDIR="$pkgdir" cmake --install build-comgr
+}
+
+package_hipcc() {
+    pkgdesc="HIP compiler driver"
+    license=('MIT')
+    depends=('glibc' 'gcc-libs')
+    optdepends=('rocm-llvm: Compiler backend for AMD hardware'
+                'rocm-device-libs: Compiler backend for AMD hardware'
+                'comgr: Compiler backend for AMD hardware'
+                'cuda: Compiler backend for NVIDIA hardware')
+
+    DESTDIR="$pkgdir" cmake --install build-hipcc
 }
 

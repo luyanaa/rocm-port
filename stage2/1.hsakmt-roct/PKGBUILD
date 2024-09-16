@@ -1,11 +1,12 @@
-pkgbase='rocm-roct-thunk-interface'
-pkgname=('rocm-roct-thunk-interface')
+pkgbase='hsakmt-roct'
+pkgname=('hsakmt-roct')
 pkgver=next
 pkgrel=999000
-pkgdesc=" Radeon Open Compute Thunk Interface "
-arch=('loong64' 'x86_64')
+pkgdesc="Radeon Open Compute Thunk Interface"
+arch=('loong64' 'x86_64' 'riscv64')
 license=('MIT')
-depends=("rocm-llvm=${pkgver}")
+depends=('rocm-core' 'rocm-llvm' 'glibc' 'numactl' 'pciutils' 'libdrm')
+makedepends=('cmake')
 url="https://github.com/ROCm/ROCT-Thunk-Interface.git"
 
 source=(
@@ -13,11 +14,13 @@ source=(
     "rocm-roct-thunk-interface.patch"
 )
 b2sums=('SKIP' 'SKIP')
-prepare() {
-cd ROCT-Thunk-Interface
-git apply ../rocm-roct-thunk-interface.patch
-cd ..
 
+prepare() {
+  cd ROCT-Thunk-Interface
+  git apply ../rocm-roct-thunk-interface.patch
+  cd ..
+}
+build() {
   mkdir build || true
   cd build
   cmake ../ROCT-Thunk-Interface \
@@ -27,15 +30,10 @@ cd ..
    -DCMAKE_INSTALL_PREFIX=/opt/rocm-${pkgver} \
    -DBUILD_SHARED_LIBS=ON \
    -G "Unix Makefiles"
-}
-build() {
-  mkdir build || true
-  cd build
   cmake --build .
 }
 
 check() {
-#  cd "ROCT-Thunk-Interface"
   mkdir test || true
 # init
   cd build
@@ -53,7 +51,6 @@ check() {
    -DLLVM_DIR=/opt/rocm-${pkgver} \
   "-DCMAKE_PREFIX_PATH=/opt/rocm-${pkgver}/;/usr" \
   -G Ninja
-#  ninja 
 # OOM
 #  BIN_DIR=$PWD LD_LIBRARY_PATH=/opt/rocm-${pkgver}/lib64:/opt/rocm-${pkgver}/lib:/opt/rocm-${pkgver}/hip/lib:$LD_LIBRARY_PATH ./run_kfdtest.sh
   cd ..

@@ -1,0 +1,50 @@
+pkgbase='rocBLAS'
+pkgname=('rocBLAS')
+pkgver=next
+pkgrel=999000
+pkgdesc='Next generation BLAS implementation for ROCm platform'
+arch=('loong64' 'x86_64' 'riscv64')
+license=('MIT')
+url='https://rocblas.readthedocs.io/en/latest'
+depends=("rocm-core==${pkgver}" 'hip' 'glibc' 'gcc-libs' 'openmp')
+makedepends=('rocm-cmake==${pkgver}' 'python' 'python-virtualenv' 'python-pyaml' 'python-wheel'
+             'python-msgpack' 'python-joblib' 'perl-file-which' 'msgpack-cxx' 'gcc-fortran')
+source=(
+    "git+https://github.com/ROCm/rocBLAS.git#branch=release/rocm-rel-6.0"
+    "git+https://github.com/ROCm/Tensile.git#branch=release/rocm-rel-6.0"
+    "rocBLAS.patch"
+)
+b2sums=('SKIP' 'SKIP' 'SKIP')
+PATH=/opt/rocm-${pkgver}/bin:$PATH
+prepare() {
+  cd Tensile
+    git apply ../find-msgpack-5.patch
+  cd ..  
+  cd rocBLAS
+    git apply ../rocBLAS.patch
+  cd ..
+}
+build() {
+  mkdir build || true
+  cd build
+  CFLAGS="-L/opt/rocm-${pkgver}/lib  -L/opt/rocm-${pkgver}/hip/lib" CXXFLAGS="-L/opt/rocm-${pkgver}/lib  -L/opt/rocm-${pkgver}/hip/lib" LD_LIBRARY_PATH=/opt/rocm-${pkgver}/lib64:/opt/rocm-${pkgver}/lib:/opt/rocm-${pkgver}/hip/lib:$LD_LIBRARY_PATH cmake ../rocBLAS \
+   -DCMAKE_BUILD_TYPE=None \
+   -DCMAKE_C_COMPILER=/opt/rocm-${pkgver}/bin/clang \
+   -DCMAKE_FIND_ROOT_PATH=/opt/rocm-${pkgver}/ \
+   -DCMAKE_CXX_COMPILER=/opt/rocm-${pkgver}/bin/hipcc \
+   -DCMAKE_CXX_FLAGS="-L/opt/rocm-${pkgver}/lib  -L/opt/rocm-${pkgver}/hip/lib" \
+   -DROCM_PATH=/opt/rocm-${pkgver} \
+   -DBUILD_WITH_TENSILE=ON \
+   -DTensile_LIBRARY_FORMAT=msgpack \
+   -DTensile_TEST_LOCAL_PATH=$PWD/../Tensile \
+   -DCMAKE_PREFIX_PATH="/opt/rocm-${pkgver}/;/usr" \
+   -DCMAKE_INSTALL_PREFIX=/opt/rocm-${pkgver} \
+   -DCMAKE_EXE_LINKER_FLAGS="-L/opt/rocm-${pkgver}/lib  -L/opt/rocm-${pkgver}/hip/lib" \
+  -G "Unix Makefiles"
+  LD_LIBRARY_PATH=/opt/rocm-${pkgver}/lib64:/opt/rocm-${pkgver}/lib:/opt/rocm-${pkgver}/hip/lib:$LD_LIBRARY_PATH  cmake --build .
+}
+
+package() {
+  cd build
+  LD_LIBRARY_PATH=/opt/rocm-${pkgver}/lib64:/opt/rocm-${pkgver}/lib:/opt/rocm-${pkgver}/hip/lib:$LD_LIBRARY_PATH DESTDIR="$pkgdir" cmake --build .
+}

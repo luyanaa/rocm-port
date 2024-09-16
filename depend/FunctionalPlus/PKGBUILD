@@ -4,7 +4,7 @@ pkgname=('FunctionalPlus')
 pkgver=next
 pkgrel=999000
 pkgdesc=""
-arch=('loong64' 'x86_64')
+arch=('loong64' 'x86_64' 'riscv64')
 license=('MIT')
 url="https://github.com/ROCm/ROCT-Thunk-Interface.git"
 

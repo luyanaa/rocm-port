@@ -3,32 +3,25 @@ pkgname=('rocm-cmake')
 pkgver=next
 pkgrel=999000
 pkgdesc="CMake modules used within the ROCm libraries"
-arch=('loong64' 'x86_64')
+arch=('riscv64' 'loong64' 'x86_64')
 license=('MIT')
+depends=('rocm-core' 'cmake')
+checkdepends=('git' 'rocm-llvm')
 url="https://github.com/ROCm/rocm-cmake"
 
 source=(
     "git+https://github.com/ROCm/rocm-cmake.git#branch=develop"
 )
 b2sums=('SKIP')
-prepare() {
+
+build() {
   mkdir build || true
   cd build
   cmake "../${pkgbase}" \
-  -DCMAKE_BUILD_TYPE=Debug \
+  -DCMAKE_BUILD_TYPE=None \
   "-DCMAKE_INSTALL_PREFIX=/opt/rocm-${pkgver}" \
   -G 'Unix Makefiles'
-}
-build() {
-  cd build
   cmake --build .
-}
-
-check() {
-  cd build
-#  ninja test
-#make check
-#echo
 }
 
 package() {

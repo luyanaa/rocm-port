@@ -35,7 +35,7 @@ index bd0ee1e..4bc1d16 100644
  // Detect and set large model builds.
  #undef HSA_LARGE_MODEL
 -#if defined(__LP64__) || defined(_M_X64)
-+#if defined(__LP64__) || defined(_M_X64) || defined(__loongarch_lp64)
++#if defined(__LP64__) || defined(_M_X64) || defined(__loongarch_lp64) || defined(__riscv)
  #define HSA_LARGE_MODEL
  #endif
  
@@ -43,7 +43,7 @@ index bd0ee1e..4bc1d16 100644
  #if !defined(LITTLEENDIAN_CPU) && !defined(BIGENDIAN_CPU)
  #if defined(__i386__) || defined(__x86_64__) || defined(_M_IX86) || \
 -    defined(_M_X64)
-+    defined(_M_X64) || defined(__loongarch_lp64)
++    defined(_M_X64) || defined(__loongarch_lp64) || defined(__riscv)
  #define LITTLEENDIAN_CPU
  #endif
  #endif
